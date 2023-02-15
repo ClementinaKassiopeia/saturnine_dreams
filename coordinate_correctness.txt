@@ -1,0 +1,17 @@
+starting:
+[0.60, 0.40], [0.80, 0.45]
+[0.80, 0.45], [0.70, 0.50]
+[0.70, 0.50], [0.60, 0.40]
+
+correct: (generates triangles in the right direction)
+[0.60, 0.40], [0.52, 0.18]
+[0.60, 0.40], [0.75, 0.23]
+
+incorrect:
+[0.60, 0.40], [0.51, 0.59]
+[0.51, 0.59], [0.70, 0.50]
+[0.70, 0.50], [0.84, 0.65]
+[0.84, 0.65], [0.80, 0.45]
+
+clockwise triangle creation works; all triangles are clockwise
+however direction of perpendicularity is faulty
