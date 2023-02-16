@@ -1,79 +1,78 @@
-use std::rc::Rc;
-use std::cell::RefCell;
-use std::f32::consts::FRAC_PI_2;
+use std::{
+    f32::consts::FRAC_PI_2,
+    collections::{HashMap, HashSet},
+    hash::Hash
+};
 
 use rand::prelude::*;
 use bevy::math::Vec2;
 
 use crate::math::angle;
 
-struct Point {
-    coords: Vec2,
-    neighbours: Vec<PointRef>
+type BranchMap = HashMap<[u32; 2], HashSet<[u32; 2]>>;
+
+// creates a line between two points, and adds that line to the vector
+fn push_joined_edge(
+  v: &mut Vec<(Vec2, Vec2)>,
+  branches: &mut BranchMap,
+  p0: Vec2,
+  p1: Vec2
+) {
+    v.push((p0.clone(), p1.clone()));
+    let p0: [u32; 2] = [p0.x.to_bits(), p0.y.to_bits()];
+    let p1: [u32; 2] = [p1.x.to_bits(), p1.y.to_bits()];
+    add_branch(branches, p0, p1);
+    add_branch(branches, p1, p0);
 }
 
-type PointRef = Rc<RefCell<Point>>;
-
-fn wrap(x: f32, y: f32) -> PointRef {
-    Rc::new(RefCell::new(
-        Point { coords: Vec2{x, y}, neighbours: Vec::new() }
-    ))
+fn add_branch<K, T>(branches: &mut HashMap<K, HashSet<T>>, key: K, val: T)
+where K: Eq + Hash,
+      T: Eq + Hash {
+    branches.entry(key).or_insert_with(HashSet::new).insert(val);
 }
 
-// creates a line between two Points, and adds that line to the vector
-fn push_joined_edge(v: &mut Vec<[PointRef; 2]>, p1: &PointRef, p2: &PointRef) {
-    p1.borrow_mut().neighbours.push(Rc::clone(p2));
-    p2.borrow_mut().neighbours.push(Rc::clone(p1));
-    v.push([Rc::clone(p1), Rc::clone(p2)]);
-}
+pub fn generate_mesh() -> impl Iterator<Item=(Vec2, Vec2)> {
+    let mut edges:      Vec<(Vec2, Vec2)> = Vec::new();
+    let mut free_edges: Vec<(Vec2, Vec2)> = Vec::with_capacity(3);
+    let mut branches = HashMap::new();
+    // let (p0, p1, p2) = (Vec2::new(0.6, 0.4), Vec2::new(0.8, 0.45), Vec2::new(0.7, 0.5));
+    let (p0, p1, p2) = (Vec2::new(0.7, 0.3), Vec2::new(0.8, 0.45), Vec2::new(0.6, 0.4));
 
-pub fn generate_mesh() -> impl Iterator<Item=[Vec2; 2]> {
-    let mut edges:      Vec<[PointRef; 2]> = Vec::new();
-    let mut free_edges: Vec<[PointRef; 2]> = Vec::with_capacity(3);
-    // let (p1, p2, p3) = (&wrap(0.6, 0.4), &wrap(0.8, 0.45), &wrap(0.7, 0.5));
-    let (p1, p2, p3) = (&wrap(0.7, 0.3), &wrap(0.8, 0.45), &wrap(0.6, 0.4));
-
-    push_joined_edge(&mut free_edges, p1, p2);
-    push_joined_edge(&mut free_edges, p2, p3);
-    push_joined_edge(&mut free_edges, p3, p1);
+    push_joined_edge(&mut free_edges, &mut branches, p0, p1);
+    push_joined_edge(&mut free_edges, &mut branches, p1, p2);
+    push_joined_edge(&mut free_edges, &mut branches, p2, p0);
     edges.extend_from_slice(free_edges.as_slice());
 
     let rng = &mut thread_rng();
-    for _ in 0..2 {
-        let mut new_edges: Vec<[PointRef; 2]> = Vec::with_capacity(3);
-        for [prf1, prf2] in free_edges.iter() {
-            add_triangle(rng, &mut new_edges, prf1, prf2);
+    for gen in 0..2 {
+        let mut new_edges: Vec<(Vec2, Vec2)> = Vec::with_capacity(3_usize.pow(gen+1));
+        for edge in free_edges.into_iter() {
+            add_triangle(rng, &mut new_edges, &mut branches, edge.0, edge.1);
         }
         edges.extend_from_slice(new_edges.as_slice());
         free_edges = new_edges;
     }
 
-    edges.into_iter().map(|[prf1, prf2]| {
-        [prf1.borrow().coords,
-         prf2.borrow().coords]
-    })
+    edges.into_iter()
 }
 
 fn add_triangle(
   rng: &mut ThreadRng,
-  new_edges: &mut Vec<[PointRef; 2]>,
-  prf1: &PointRef,
-  prf2: &PointRef
+  new_edges: &mut Vec<(Vec2, Vec2)>,
+  branches: &mut BranchMap,
+  p0: Vec2,
+  p1: Vec2
 ) {
-    let p1 = prf1.borrow().coords;
-    let p2 = prf2.borrow().coords;
-
-    let edge_len = Vec2::distance(p2, p1);
+    let edge_len = Vec2::distance(p1, p0);
     let new_triangle_height = rng.gen_range(edge_len*0.5 .. edge_len*1.25);
-    let perp_angle = angle(&p1, &p2) - FRAC_PI_2;
-    let new_point = &wrap(
-        rand_between(rng, p1.x, p2.x) + f32::cos(perp_angle) * new_triangle_height,
-        rand_between(rng, p1.y, p2.y) + f32::sin(perp_angle) * new_triangle_height
+    let perp_angle = angle(p0, p1) - FRAC_PI_2;
+    let new_point = Vec2::new(
+        rand_between(rng, p0.x, p1.x) + f32::cos(perp_angle) * new_triangle_height,
+        rand_between(rng, p0.y, p1.y) + f32::sin(perp_angle) * new_triangle_height
     );
-    drop(p1); drop(p2);
 
-    push_joined_edge(new_edges, prf1, new_point);
-    push_joined_edge(new_edges, new_point, prf2);
+    push_joined_edge(new_edges, branches, p0, new_point);
+    push_joined_edge(new_edges, branches, new_point, p1);
 }
 
 fn rand_between(rng: &mut ThreadRng, start: f32, stop: f32) -> f32 {

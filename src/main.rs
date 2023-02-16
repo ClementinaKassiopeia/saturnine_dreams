@@ -32,7 +32,7 @@ fn _text_onscreen(mut cmds: Commands, serv: Res<AssetServer>) {
 
 fn display_points(mut cmds: Commands, serv: Res<AssetServer>) {
     let mesh = triangles::generate_mesh();
-    for [p1, p2] in mesh {
+    for (p1, p2) in mesh {
         cmds.spawn(sprites::line_between(&p1, &p2));
 
         // println!("[{:.2}, {:.2}], [{:.2}, {:.2}]", p1.x, p1.y, p2.x, p2.y);
@@ -101,6 +101,6 @@ empty the set of no longer generating edges
 repeat for x iterations
 
 data structures:
-point: x, y, references to neighbouring points
-edge: &point, &point
+point: x, y
+edge: point, point
 */
